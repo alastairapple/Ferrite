@@ -39,6 +39,7 @@ class RealDebrid: PollingDebridSource, ObservableObject {
     @Published var IAValues: [DebridIA] = []
     @Published var cloudDownloads: [DebridCloudDownload] = []
     @Published var cloudMagnets: [DebridCloudMagnet] = []
+    @Published var supportedHosts: [HostsResponse] = []
     var cloudTTL: Double = 0.0
 
     private let baseAuthUrl = "https://api.real-debrid.com/oauth/v2"
@@ -62,6 +63,7 @@ class RealDebrid: PollingDebridSource, ObservableObject {
         Task {
             try? await getUserDownloads()
             try? await getUserMagnets()
+            try? await getSupportedHosts()
         }
     }
 
@@ -483,5 +485,129 @@ class RealDebrid: PollingDebridSource, ObservableObject {
         request.httpMethod = "DELETE"
 
         try await performRequest(request: &request, requestName: #function)
+    }
+
+    // MARK: - Enhanced debrid management methods
+
+    // Uploads a torrent file to Real-Debrid
+    func uploadTorrentFile(fileData: Data, filename: String) async throws -> String {
+        var request = URLRequest(url: URL(string: "\(baseApiUrl)/torrents/addTorrent")!)
+        request.httpMethod = "PUT"
+
+        let boundary = UUID().uuidString
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        var body = Data()
+        
+        // Add the torrent file
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"torrent\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: application/x-bittorrent\r\n\r\n".data(using: .utf8)!)
+        body.append(fileData)
+        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+
+        request.httpBody = body
+
+        let data = try await performRequest(request: &request, requestName: #function)
+        let rawResponse = try jsonDecoder.decode(UploadTorrentResponse.self, from: data)
+
+        return rawResponse.id
+    }
+
+    // Unrestricts a web download link
+    func unrestrictWebLink(_ webLink: String) async throws -> WebLinkUnrestrictResponse {
+        var request = URLRequest(url: URL(string: "\(baseApiUrl)/unrestrict/link")!)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+
+        var bodyComponents = URLComponents()
+        bodyComponents.queryItems = [URLQueryItem(name: "link", value: webLink)]
+
+        request.httpBody = bodyComponents.query?.data(using: .utf8)
+
+        let data = try await performRequest(request: &request, requestName: #function)
+        let rawResponse = try jsonDecoder.decode(WebLinkUnrestrictResponse.self, from: data)
+
+        return rawResponse
+    }
+
+    // Gets transcoding information for a download link
+    func getTranscodingInfo(downloadId: String) async throws -> TranscodingResponse {
+        var request = URLRequest(url: URL(string: "\(baseApiUrl)/streaming/transcode/\(downloadId)")!)
+
+        let data = try await performRequest(request: &request, requestName: #function)
+        let rawResponse = try jsonDecoder.decode(TranscodingResponse.self, from: data)
+
+        return rawResponse
+    }
+
+    // Gets transcoding media URL
+    func getTranscodingUrl(downloadId: String, format: String = "apple") async throws -> String {
+        var request = URLRequest(url: URL(string: "\(baseApiUrl)/streaming/mediaInfos/\(downloadId)")!)
+
+        let data = try await performRequest(request: &request, requestName: #function)
+        
+        // Parse the response to get the transcoding URL
+        // This is a simplified implementation - the actual API response may differ
+        if let jsonResponse = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let transcodingUrl = jsonResponse[format] as? String {
+            return transcodingUrl
+        }
+        
+        throw DebridError.FailedRequest(description: "Could not get transcoding URL for format \(format)")
+    }
+
+    // Gets list of supported hosts for web link unrestricting
+    func getSupportedHosts() async throws {
+        var request = URLRequest(url: URL(string: "\(baseApiUrl)/hosts")!)
+
+        let data = try await performRequest(request: &request, requestName: #function)
+        let rawResponse = try jsonDecoder.decode([HostsResponse].self, from: data)
+        
+        supportedHosts = rawResponse.filter { $0.status == "up" }
+    }
+
+    // Check if a web link is supported by Real-Debrid
+    func isWebLinkSupported(_ webLink: String) -> Bool {
+        guard let url = URL(string: webLink),
+              let host = url.host?.lowercased() else {
+            return false
+        }
+        
+        return supportedHosts.contains { $0.host.lowercased().contains(host) || host.contains($0.host.lowercased()) }
+    }
+
+    // Batch add multiple magnets
+    func addMagnets(_ magnets: [Magnet]) async throws -> [String] {
+        var torrentIds: [String] = []
+        
+        for magnet in magnets {
+            do {
+                let torrentId = try await addMagnet(magnet: magnet)
+                torrentIds.append(torrentId)
+            } catch {
+                // Continue with other magnets even if one fails
+                print("Failed to add magnet \(magnet.hash ?? "unknown"): \(error)")
+            }
+        }
+        
+        return torrentIds
+    }
+
+    // Enhanced cloud management with filtering
+    func getFilteredDownloads(searchText: String = "", fileType: String = "") -> [DebridCloudDownload] {
+        return cloudDownloads.filter { download in
+            let matchesSearch = searchText.isEmpty || download.fileName.lowercased().contains(searchText.lowercased())
+            let matchesType = fileType.isEmpty || download.fileName.lowercased().hasSuffix(fileType.lowercased())
+            return matchesSearch && matchesType
+        }
+    }
+
+    func getFilteredMagnets(searchText: String = "", status: String = "") -> [DebridCloudMagnet] {
+        return cloudMagnets.filter { magnet in
+            let matchesSearch = searchText.isEmpty || magnet.fileName.lowercased().contains(searchText.lowercased())
+            let matchesStatus = status.isEmpty || magnet.status == status
+            return matchesSearch && matchesStatus
+        }
     }
 }

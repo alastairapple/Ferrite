@@ -174,4 +174,63 @@ extension RealDebrid {
             case chunks, download, streamable, generated
         }
     }
+
+    // MARK: - Torrent file upload endpoint
+
+    struct UploadTorrentResponse: Codable, Sendable {
+        let id: String
+        let uri: String
+    }
+
+    // MARK: - Web link unrestrict endpoint
+
+    struct WebLinkUnrestrictResponse: Codable, Sendable {
+        let id, filename: String
+        let mimeType: String?
+        let filesize: Int
+        let link: String
+        let host: String
+        let hostIcon: String
+        let chunks, crc: Int
+        let download: String
+        let streamable: Int
+
+        enum CodingKeys: String, CodingKey {
+            case id, filename, mimeType, filesize, link, host
+            case hostIcon = "host_icon"
+            case chunks, crc, download, streamable
+        }
+    }
+
+    // MARK: - Transcoding endpoints
+
+    struct TranscodingResponse: Codable, Sendable {
+        let apple: TranscodingInfo?
+        let android: TranscodingInfo?
+        let chrome: TranscodingInfo?
+        let dash: TranscodingInfo?
+    }
+
+    struct TranscodingInfo: Codable, Sendable {
+        let video: String?
+        let audio: String?
+        let length: String?
+        let bitrate: String?
+        let resolution: String?
+    }
+
+    // MARK: - Hosts support endpoint
+
+    struct HostsResponse: Codable, Sendable {
+        let host: String
+        let max_file_size: Int
+        let type: String
+        let status: String
+
+        enum CodingKeys: String, CodingKey {
+            case host
+            case max_file_size = "max_file_size"
+            case type, status
+        }
+    }
 }

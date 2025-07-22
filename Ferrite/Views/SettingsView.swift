@@ -50,6 +50,38 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("Enhanced Debrid Management") {
+                    NavigationLink {
+                        WebLinkUnrestrictView()
+                    } label: {
+                        HStack {
+                            Image(systemName: "link")
+                                .foregroundColor(.accentColor)
+                            Text("Unrestrict Web Links")
+                        }
+                    }
+                    
+                    NavigationLink {
+                        TorrentUploadView()
+                    } label: {
+                        HStack {
+                            Image(systemName: "square.and.arrow.up")
+                                .foregroundColor(.accentColor)
+                            Text("Upload Torrent Files")
+                        }
+                    }
+                    
+                    NavigationLink {
+                        BulkDownloadView()
+                    } label: {
+                        HStack {
+                            Image(systemName: "square.stack.3d.down.forward")
+                                .foregroundColor(.accentColor)
+                            Text("Bulk Downloads")
+                        }
+                    }
+                }
+
                 Section("Playback services") {
                     NavigationLink {
                         SettingsKodiView(kodiServers: kodiServers)
@@ -114,6 +146,10 @@ struct SettingsView: View {
                 Section("Plugin management") {
                     NavigationLink("Plugin lists") {
                         SettingsPluginListView()
+                    }
+                    
+                    NavigationLink("Unchained Plugins") {
+                        UnchainedPluginView()
                     }
                 }
 
