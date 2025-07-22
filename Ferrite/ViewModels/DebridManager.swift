@@ -427,6 +427,11 @@ class DebridManager: ObservableObject {
                 // Populates the inner downloads and magnet arrays
                 try await selectedSource.getUserDownloads()
                 try await selectedSource.getUserMagnets()
+                
+                // Update supported hosts for RealDebrid
+                if let realDebrid = selectedSource as? RealDebrid {
+                    try await realDebrid.getSupportedHosts()
+                }
 
                 // Update the TTL to 5 minutes from now
                 selectedSource.cloudTTL = Date().timeIntervalSince1970 + 300
@@ -488,6 +493,121 @@ class DebridManager: ObservableObject {
             default:
                 await sendDebridError(error, prefix: "\(selectedSource.id) magnet delete error")
             }
+        }
+    }
+
+    // MARK: - Enhanced debrid management methods
+
+    // Upload torrent file to debrid service
+    func uploadTorrentFile(fileData: Data, filename: String) async {
+        guard let selectedSource = selectedDebridSource else {
+            logManager?.error("DebridManager: No debrid service selected for torrent upload")
+            return
+        }
+
+        guard let realDebrid = selectedSource as? RealDebrid else {
+            logManager?.error("DebridManager: Torrent file upload is only supported for RealDebrid")
+            return
+        }
+
+        logManager?.updateIndeterminateToast("Uploading torrent file...")
+
+        do {
+            let torrentId = try await realDebrid.uploadTorrentFile(fileData: fileData, filename: filename)
+            logManager?.hideIndeterminateToast()
+            logManager?.info("Torrent file uploaded successfully: \(filename)")
+            
+            // Refresh cloud to show the new torrent
+            await fetchDebridCloud(bypassTTL: true)
+        } catch {
+            logManager?.hideIndeterminateToast()
+            await sendDebridError(error, prefix: "Torrent upload error")
+        }
+    }
+
+    // Unrestrict web download link
+    func unrestrictWebLink(_ webLink: String) async -> String? {
+        guard let selectedSource = selectedDebridSource else {
+            logManager?.error("DebridManager: No debrid service selected for web link unrestricting")
+            return nil
+        }
+
+        guard let realDebrid = selectedSource as? RealDebrid else {
+            logManager?.error("DebridManager: Web link unrestricting is only supported for RealDebrid")
+            return nil
+        }
+
+        logManager?.updateIndeterminateToast("Unrestricting web link...")
+
+        do {
+            let response = try await realDebrid.unrestrictWebLink(webLink)
+            logManager?.hideIndeterminateToast()
+            logManager?.info("Web link unrestricted successfully")
+            
+            // Refresh downloads to show the new file
+            await fetchDebridCloud(bypassTTL: true)
+            
+            return response.download
+        } catch {
+            logManager?.hideIndeterminateToast()
+            await sendDebridError(error, prefix: "Web link unrestrict error")
+            return nil
+        }
+    }
+
+    // Get transcoding URL for a download
+    func getTranscodingUrl(downloadId: String, format: String = "apple") async -> String? {
+        guard let selectedSource = selectedDebridSource else {
+            logManager?.error("DebridManager: No debrid service selected for transcoding")
+            return nil
+        }
+
+        guard let realDebrid = selectedSource as? RealDebrid else {
+            logManager?.error("DebridManager: Transcoding is only supported for RealDebrid")
+            return nil
+        }
+
+        do {
+            return try await realDebrid.getTranscodingUrl(downloadId: downloadId, format: format)
+        } catch {
+            await sendDebridError(error, prefix: "Transcoding URL error")
+            return nil
+        }
+    }
+
+    // Check if web link is supported by current debrid service
+    func isWebLinkSupported(_ webLink: String) -> Bool {
+        guard let realDebrid = selectedDebridSource as? RealDebrid else {
+            return false
+        }
+        
+        return realDebrid.isWebLinkSupported(webLink)
+    }
+
+    // Add multiple magnets to download queue
+    func addMagnetsToQueue(_ magnets: [Magnet]) async {
+        guard let selectedSource = selectedDebridSource else {
+            logManager?.error("DebridManager: No debrid service selected for adding magnets")
+            return
+        }
+
+        guard let realDebrid = selectedSource as? RealDebrid else {
+            logManager?.error("DebridManager: Batch magnet adding is only supported for RealDebrid")
+            return
+        }
+
+        logManager?.updateIndeterminateToast("Adding \(magnets.count) magnets to queue...")
+
+        do {
+            let torrentIds = try await realDebrid.addMagnets(magnets)
+            logManager?.hideIndeterminateToast()
+            logManager?.info("Added \(torrentIds.count) of \(magnets.count) magnets to download queue")
+            
+            // Refresh cloud to show the new torrents
+            await fetchDebridCloud(bypassTTL: true)
+        } catch {
+            logManager?.hideIndeterminateToast()
+            await sendDebridError(error, prefix: "Batch magnet add error")
         }
     }
 }
