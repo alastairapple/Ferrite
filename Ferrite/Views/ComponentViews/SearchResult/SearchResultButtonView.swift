@@ -126,6 +126,25 @@ struct SearchResultButtonView: View {
                 Text("Download to Debrid")
                 Image(systemName: "arrow.down.circle")
             }
+            
+            // Enhanced context menu options
+            Button {
+                Task {
+                    await debridManager.addMagnetsToQueue([result.magnet])
+                }
+            } label: {
+                Text("Add to Download Queue")
+                Image(systemName: "plus.square.on.square")
+            }
+            
+            if let magnetLink = result.magnet.link {
+                Button {
+                    UIPasteboard.general.string = magnetLink
+                } label: {
+                    Text("Copy Magnet Link")
+                    Image(systemName: "doc.on.doc")
+                }
+            }
         }
         .alert("Caching file", isPresented: $debridManager.showDeleteAlert) {
             Button("Yes", role: .destructive) {
